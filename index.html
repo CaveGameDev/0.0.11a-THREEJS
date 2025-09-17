@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Play</title>
+  <style>
+    :root { --bg: #000; }
+    html,body{height:100%;margin:0;background:var(--bg);font-family: Noto Sans, Arial, sans-serif;color:#fff; overflow: hidden;} /* prevent scrollbars */
+    /* Stage centers the background image at its natural size with black surround */
+    #stage{
+      width:100%;
+      display:flex;
+      justify-content:center;
+      align-items:flex-start;
+      min-height:100vh;
+      padding-top:20px;
+      box-sizing:border-box;
+      position:relative;
+      overflow:hidden;
+      background:#000;
+    }
+    /* Ensure image renders responsively without distortion and never causes scrollbars.
+       Keep natural aspect but allow it to shrink to fit the viewport while maintaining the iframe alignment. */
+    #photo{
+      display:block;
+      max-width: calc(100% - 40px);
+      max-height: calc(100% - 40px);
+      height:auto;
+      margin:0 auto;
+      image-rendering: auto;
+      pointer-events: none;
+      background-color: #000; /* ensure no white shows behind the image */
+      box-sizing: border-box;
+      object-fit: contain;
+    }
+
+    /* iframe fixed size top-middle, placed relative to the stage so it's centered over the image */
+    .embed-frame {
+      width:640px;
+      height:480px;
+      border:2px solid rgba(0,0,0,0.6);
+      box-shadow:0 8px 24px rgba(0,0,0,0.6);
+      background:#000;
+      z-index:1000;
+      position:absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display:block;
+      will-change: top, left, transform;
+    }
+
+    /* Small accessibility caption hidden visually but available to screen readers */
+    .sr-only {
+      position: absolute !important;
+      height: 1px; width: 1px;
+      overflow: hidden;
+      clip: rect(1px, 1px, 1px, 1px);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage" role="main" aria-label="Game launcher stage">
+    <img id="photo" src="/Main.jpeg" alt="Main artwork" crossorigin="anonymous">
+  </div>
+
+  <div class="sr-only">Embedded game is shown in a centered iframe near the top of this image.</div>
+
+  <script>
+    // Remove any stray textual nodes that might have been injected accidentally.
+    (function cleanup() {
+      // scan body for any literal text nodes containing triple-backticks or code fences and remove them
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+      const toRemove = [];
+      while (walker.nextNode()) {
+        const txt = walker.currentNode.nodeValue || '';
+        if (txt.includes('```') || txt.trim() === 'Given the instructions and the code provided, I will follow the plan and output the new file called play.html.') {
+          toRemove.push(walker.currentNode);
+        }
+      }
+      toRemove.forEach(n => n.parentNode && n.parentNode.removeChild(n));
+    })();
+
+    // Create exactly one iframe that loads MAIN.html with embedded=1 to signal MAIN to run embedded mode.
+    (function createOneIframe(){
+      if (document.getElementById('embedded-main-iframe')) return;
+      const iframe = document.createElement('iframe');
+      iframe.id = 'embedded-main-iframe';
+      iframe.className = 'embed-frame';
+      iframe.src = 'MAIN.html?embedded=1';
+      iframe.title = 'Game';
+      iframe.loading = 'lazy';
+      iframe.setAttribute('aria-label','Embedded game window');
+      // append into the stage container (positioned relative) so centering calculations are stable
+      const stage = document.getElementById('stage') || document.body;
+      stage.appendChild(iframe);
+
+      // Observe image load to position iframe locked to a spot on the image.
+      const img = document.getElementById('photo');
+
+      function positionOverImage(){
+        const rect = img.getBoundingClientRect();
+        const stageRect = stage.getBoundingClientRect();
+        const iframeEl = document.getElementById('embedded-main-iframe');
+        if (!iframeEl || rect.width === 0 || rect.height === 0) return;
+
+        // Enforce fixed requested iframe size and center it over the image horizontally.
+        const imgCenterX_stage = rect.left - stageRect.left + (rect.width / 2);
+        iframeEl.style.width = '640px';
+        iframeEl.style.height = '480px';
+        iframeEl.style.left = imgCenterX_stage + 'px';
+        iframeEl.style.transform = 'translateX(-50%)';
+        iframeEl.style.top = Math.round((rect.top - stageRect.top) + 6) + 'px';
+      }
+
+      // run once and on resize/scroll/image changes (keeps alignment stable)
+      img.addEventListener('load', positionOverImage);
+      window.addEventListener('resize', positionOverImage);
+      window.addEventListener('scroll', positionOverImage);
+      // also observe the image for layout changes (use ResizeObserver if available)
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(positionOverImage);
+        ro.observe(img);
+        ro.observe(stage);
+      }
+      // try immediately in case image is cached
+      positionOverImage();
+    })();
+  </script>
+</body>
+</html>

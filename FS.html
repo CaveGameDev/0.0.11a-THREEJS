@@ -1,0 +1,107 @@
+
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RubyDung (Fullscreen)</title>
+  <style>
+    :root{
+      /* ...existing vars... */
+    }
+    html, body { height:100%; margin:0; }
+    body{
+      margin:0;
+      padding:0;
+      overflow:hidden;
+      background:#000; /* default; overridden by JS tweak below */
+      font-family: Noto Sans, Arial, sans-serif;
+    }
+    canvas#canvas{
+      position:fixed;
+      inset:0;
+      width:100%;
+      height:100%;
+      display:block;
+      cursor: default;
+    }
+    #ui{ position:fixed; left:10px; top:6px; z-index:100; color:#fff; }
+    #block-preview{
+      position:fixed; right:16px; bottom:6px; width:92px; height:100px;
+      display:flex; align-items:center; justify-content:center;
+      z-index:200; pointer-events:none; background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.00);
+    }
+    #block-preview canvas{ image-rendering: pixelated; width:46px; height:50px; }
+    #crosshair{
+      position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:30px; height:30px; pointer-events:none; z-index:999; display:block;
+    }
+    #crosshair::before, #crosshair::after{
+      content:""; position:absolute; left:50%; top:50%; background:#fff;
+    }
+    #crosshair::before{ width:22px; height:3px; transform:translate(-50%,-50%); }
+    #crosshair::after{ width:3px; height:22px; transform:translate(-50%,-50%); }
+    #js-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:url('code.png') center/cover no-repeat rgba(0,0,0,0.85);z-index:20000}
+    #js-overlay img{max-width:70vw;max-height:70vh;image-rendering:auto}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./thre.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="ui"></div>
+  <div id="block-preview"><canvas id="block-preview-canvas" width="46" height="50"></canvas></div>
+  <div id="crosshair" aria-hidden="true"></div>
+  <div id="js-overlay" aria-hidden="true">
+    <img src="JAVASCRIPT.png" alt="JavaScript Logo">
+  </div>
+
+  <script>
+    /* @tweakable background color for fullscreen mode */
+    const FS_BACKGROUND = '#000000';
+    /* @tweakable show the center crosshair in fullscreen */
+    const FS_SHOW_CROSSHAIR = true;
+    /* @tweakable request pointer lock immediately on first user click/touch */
+    const FS_AUTO_POINTERLOCK = true;
+    /* @tweakable maximum renderer pixel ratio (1 = no HiDPI) */
+    const FS_MAX_PIXEL_RATIO = 1.5;
+
+    // Apply background and crosshair visibility
+    document.body.style.background = FS_BACKGROUND;
+    document.getElementById('crosshair').style.display = FS_SHOW_CROSSHAIR ? 'block' : 'none';
+
+    // Mark this load as embedded-like so MAIN behaviors tied to embedding aren't used here
+    window._isEmbedded = true;
+
+    // Ensure canvas pointer lock UX matches fullscreen intent
+    (function(){
+      const canvas = document.getElementById('canvas');
+      function onPLChange(){
+        canvas.style.cursor = (document.pointerLockElement === canvas) ? 'none' : 'default';
+      }
+      document.addEventListener('pointerlockchange', onPLChange);
+      onPLChange();
+      if (FS_AUTO_POINTERLOCK) {
+        const req = () => canvas.requestPointerLock && canvas.requestPointerLock();
+        canvas.addEventListener('click', req);
+        canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); req(); }, { passive:false });
+      }
+      // Expose preferred max pixel ratio to renderer (RubyDung will clamp if it reads this)
+      window.__FS_MAX_PIXEL_RATIO__ = FS_MAX_PIXEL_RATIO;
+    })();
+  </script>
+
+  <script type="module">
+    import './RubyDung.js';
+  </script>
+</body>
+</html>
+```
+This code defines an HTML document with a canvas element and various UI elements, including a block preview and crosshair. It sets up event listeners for pointer lock changes and auto-pointer lock requests. The code uses the `three.js` library and imports the `RubyDung.js` script, which is assumed to contain the game logic.

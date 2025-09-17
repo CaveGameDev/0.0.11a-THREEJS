@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RubyDung</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Noto Sans', Arial, sans-serif;
+        }
+        /* Hide PeerJS / P2P short-join UI as requested */
+        #network-ui { display: none !important; }
+        canvas {
+            display: block;
+            cursor: default; /* show cursor until pointerlock is active */
+        }
+        /* Ensure the main game canvas is centered inside the iframe */
+        canvas#canvas {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            /* keep it responsive within the iframe */
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+        }
+        #ui {
+            position: absolute;
+            top: 5px; /* moved up from 10px to 5px to place text ~5px from top */
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            z-index: 100;
+        }
+        #block-preview {
+            /* Position controlled by config.js via applyConfigPositions */
+            position: absolute;
+            width: 92px;
+            height: 100px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.00); /* invisible outline */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            pointer-events: none; /* UI is passive; actions use clicks for world */
+        }
+        #block-preview canvas {
+            image-rendering: pixelated;
+            width: 46px;
+            height: 50px;
+        }
+        
+        /* Simple centered white + crosshair */
+        #crosshair {
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            width: 30px; /* increased from 20px */
+            height: 30px; /* increased from 20px */
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 999;
+        }
+        #crosshair::before, #crosshair::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            background: white;
+        }
+        #crosshair::before { /* horizontal */
+            width: 22px; /* increased from 14px */
+            height: 3px; /* increased from 2px */
+            transform: translate(-50%, -50%);
+        }
+        #crosshair::after { /* vertical */
+            width: 3px; /* increased from 2px */
+            height: 22px; /* increased from 14px */
+            transform: translate(-50%, -50%);
+        }
+
+        /* styling for the server messages */
+        .server-line { white-space: nowrap; font-size:14px; text-shadow: 2px 2px 0 rgba(0,0,0,0.8); color: #ffffff; opacity: 1; transition: opacity 1s; }
+        .server-token { color: yellow; font-weight: 700; margin-right: 6px; }
+        .server-text { color: #ffffff; }
+        
+        /* Background image centered at natural size with black surround */
+        body {
+            background-color: black; /* black surround */
+            background-image: none; /* ensure no repeating texture interferes */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* keep content top-aligned so iframe sits top-middle */
+            min-height: 100vh;
+            margin: 0;
+            padding-top: 20px; /* small top gap for iframe */
+        }
+        #embed-holder { display:flex; justify-content:center; align-items:flex-start; width:100%; }
+        #main-photo { display:block; margin: 0 auto; max-width:none; max-height:none; }
+        .embed-frame {
+            position: absolute;
+            top: 20px; /* top gap */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 640px;
+            height: 480px;
+            border: 2px solid rgba(0,0,0,0.6);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            background: #000;
+            z-index: 1000;
+        }
+        #js-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:url('code.png') center/cover no-repeat rgba(0,0,0,0.85);z-index:20000}
+        #js-overlay img{max-width:70vw;max-height:70vh;image-rendering:auto}
+    </style>
+</head>
+<body>
+    <script>
+        const search = new URLSearchParams(location.search);
+        const isEmbedded = search.get('embedded') === '1' || search.get('embedded') === 'true';
+        // expose flag for other scripts if needed
+        window._isEmbedded = isEmbedded;
+    </script>
+    <!-- top-middle iframe shown only when not embedded -->
+    <div id="embed-holder" aria-hidden="false">
+        <img id="main-photo" src="/Main.jpeg" alt="Background" crossorigin="anonymous">
+        <script>
+            if (!window._isEmbedded) {
+                // only create one iframe instance (guard by id) and append into the embed-holder
+                if (!document.getElementById('embedded-main-iframe')) {
+                    const ifr = document.createElement('iframe');
+                    ifr.id = 'embedded-main-iframe';
+                    ifr.className = 'embed-frame';
+                    // load MAIN.html with embedded flag to avoid infinite nesting
+                    ifr.src = 'MAIN.html?embedded=1';
+                    ifr.title = 'MAIN (embedded)';
+                    const holder = document.getElementById('embed-holder') || document.body;
+                    holder.appendChild(ifr);
+                }
+            }
+        </script>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div id="ui">
+    </div>
+    <canvas id="version-canvas" width="256" height="48" style="position:absolute; left:10px; top:6px; z-index:210; pointer-events:none; image-rendering:pixelated;"></canvas>
+    <div id="block-preview" title="Selected block (left click: break, right click: place)">
+        <canvas id="block-preview-canvas" width="46" height="50"></canvas>
+    </div>
+
+    <!-- Center crosshair -->
+    <div id="crosshair" aria-hidden="true"></div>
+
+    <!-- Chat removed per request; show author/link only -->
+    <div id="stg-link" style="position: absolute; left:10px; top:80px; z-index:110; font-family: Noto Sans, monospace; font-size:14px; display:flex; flex-direction:column; gap:6px;">
+      <div class="server-line" id="stg-line-1">
+        <span class="server-token">[SERVER]</span>
+        <span class="server-text">: Made By <a href="https://github.com/cavegamedev" target="_blank" rel="noopener noreferrer" style="color:#4ea3ff; text-decoration:underline;">STG</a></span>
+      </div>
+      <div class="server-line" id="stg-line-2">
+        <span class="server-token">[SERVER]</span>
+        <span class="server-text">: Multi-Player will not be ready for a while, be patient!</span>
+      </div>
+    </div>
+
+    <!-- P2P Short Join Code UI -->
+    <div id="network-ui" style="position: absolute; right: 12px; top: 120px; z-index:120; color:#fff; font-family: monospace;">
+      <div style="background: rgba(0,0,0,0.45); padding:8px; border-radius:6px; width:220px;">
+        <div style="font-size:13px; margin-bottom:6px;">Join / Host (5 chars)</div>
+        <div style="display:flex; gap:6px;">
+          <input id="room-code-input" maxlength="5" placeholder="ABCDE" style="flex:1; padding:6px; background:#111; color:#fff; border:1px solid #333; outline:none;">
+          <button id="btn-join" style="padding:6px;">Join</button>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <button id="btn-host" style="flex:1; padding:6px;">Host</button>
+          <button id="btn-copy" style="flex:1; padding:6px;">Copy URL</button>
+        </div>
+        <div id="network-status" style="margin-top:6px; font-size:12px; color:#cfcfcf;"></div>
+      </div>
+    </div>
+
+    <div id="js-overlay" aria-hidden="true">
+      <img src="JAVASCRIPT.png" alt="JavaScript Logo">
+    </div>
+
+    <script>
+      /* @tweakable toggle using minified three.js */
+      const USE_MIN_THREE = true;
+      const im = document.createElement('script');
+      im.type = 'importmap';
+      im.textContent = JSON.stringify({ imports: { three: USE_MIN_THREE ? './three.core.min.js' : './thre.js' } });
+      document.currentScript.parentNode.insertBefore(im, document.currentScript.nextSibling);
+    </script>
+
+    <script>
+      // Hide cursor only when pointer lock is active so users can click chat buttons easily.
+      (function(){
+        const canvas = document.getElementById('canvas');
+        function onPointerLockChange() {
+          if (document.pointerLockElement === canvas) {
+            canvas.style.cursor = 'none';
+          } else {
+            canvas.style.cursor = 'default';
+          }
+        }
+        document.addEventListener('pointerlockchange', onPointerLockChange);
+        // Also set initial state
+        onPointerLockChange();
+        // Enable touch-to-request-pointerlock for mobile: single touch will request pointer lock
+        canvas.addEventListener('touchstart', function requestLockTouch(e) {
+          e.preventDefault();
+          canvas.requestPointerLock && canvas.requestPointerLock();
+        }, { passive: false });
+      })();
+    </script>
+
+    <script>
+      // Short joincode UI wiring (uses global P2PNetwork)
+      (function(){
+        const input = document.getElementById('room-code-input');
+        const btnJoin = document.getElementById('btn-join');
+        const btnHost = document.getElementById('btn-host');
+        const btnCopy = document.getElementById('btn-copy');
+        const status = document.getElementById('network-status');
+
+        function shortify(val){ return (val||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5); }
+        btnJoin.onclick = async () => {
+          const code = shortify(input.value);
+          if (!code) { status.textContent = 'Enter a 5-char code'; return; }
+          status.textContent = 'Joining ' + code + ' ...';
+          try {
+            await window.P2PNetwork.joinRoom(code);
+            status.textContent = 'Joined: ' + code;
+            // update url hash for shareability
+            history.replaceState(null,'', `${location.pathname}#JOIN${code}`);
+          } catch (e) { status.textContent = 'Join failed'; console.warn(e); }
+        };
+        btnHost.onclick = async () => {
+          let code = shortify(input.value) || (() => {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let s=''; for (let i=0;i<5;i++) s+=chars.charAt(Math.floor(Math.random()*chars.length)); return s;
+          })();
+          input.value = code;
+          status.textContent = 'Hosting ' + code + ' ...';
+          try {
+            const url = await window.P2PNetwork.hostRoom(code);
+            status.textContent = 'Hosting: ' + code;
+            // set hash and let others join via short code
+            history.replaceState(null,'', `${location.pathname}#JOIN${code}`);
+            // expose share URL to copy button
+            btnCopy.dataset.url = url;
+          } catch (e) { status.textContent = 'Host failed'; console.warn(e); }
+        };
+        btnCopy.onclick = () => {
+          const url = btnCopy.dataset.url || `${location.origin}${location.pathname}#JOIN${shortify(input.value)}`;
+          navigator.clipboard?.writeText(url).then(()=> status.textContent='URL copied').catch(()=> status.textContent='Copy failed');
+        };
+        // prefill from hash on load
+        (function(){ const h = location.hash.slice(1).replace(/^JOIN/,''); if (h) input.value = shortify(h); })();
+      })();
+    </script>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./thre.js"
+        }
+    }
+    </script>
+    <!-- PeerJS removed per request -->
+    <!-- P2PNetwork removed per request -->
+    <script type="module">
+      import { drawVersionImageToCanvas } from './VersionRenderer.js';
+      const vcanvas = document.getElementById('version-canvas');
+      function renderVersion(){ 
+        // keep canvas high-DPI friendly
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        vcanvas.width = Math.floor(256 * dpr); vcanvas.height = Math.floor(48 * dpr);
+        vcanvas.style.width = '256px'; vcanvas.style.height = '48px';
+        const ok = drawVersionImageToCanvas(vcanvas);
+        return ok;
+      }
+      renderVersion();
+      window.addEventListener('resize', () => requestAnimationFrame(renderVersion));
+    </script>
+
+    <!-- Auto-fade server messages after 15s -->
+    <script>
+      (function autoFadeServerLines(){
+        const lines = document.querySelectorAll('.server-line');
+        if (!lines.length) return;
+        lines.forEach(el => {
+          el.style.transition = 'opacity 1s';
+        });
+        // fade after 15s, then remove after 16s
+        setTimeout(() => lines.forEach(el => el.style.opacity = '0'), 15000);
+        setTimeout(() => lines.forEach(el => el.remove()), 16000);
+      })();
+    </script>
+
+    <script type="module" src="./RubyDung.js"></script>
+
+    <script>
+      // Apply UI positions from config.js so placement is data-driven and tweakable.
+      (async function applyConfigPositions(){
+        try {
+          const mod = await import('./config.js');
+          const cfg = mod.config || {};
+          const bpCfg = cfg.blockPreview || {};
+          const bp = document.getElementById('block-preview');
+          if (bp) {
+            // apply specified values if present (use setProperty with important to override stylesheet)
+            bp.style.position = bpCfg.position || 'absolute';
+            if (bpCfg.top) bp.style.setProperty('top', bpCfg.top, 'important');
+            if (bpCfg.right) bp.style.setProperty('right', bpCfg.right, 'important');
+            if (bpCfg.left) bp.style.setProperty('left', bpCfg.left, 'important');
+            if (bpCfg.bottom) bp.style.setProperty('bottom', bpCfg.bottom, 'important');
+            if (bpCfg.width) bp.style.setProperty('width', bpCfg.width, 'important');
+            if (bpCfg.height) bp.style.setProperty('height', bpCfg.height, 'important');
+            if (bpCfg.zIndex !== undefined) bp.style.setProperty('z-index', String(bpCfg.zIndex), 'important');
+            if (bpCfg.pointerEvents) bp.style.setProperty('pointer-events', bpCfg.pointerEvents, 'important');
+          }
+
+          // Enforce iframe fixed size (keeps previous behavior)
+          const iframe = document.getElementById('embedded-main-iframe') || document.querySelector('iframe.embed-frame');
+          if (iframe) {
+            iframe.style.width = '640px';
+            iframe.style.height = '480px';
+            iframe.style.position = 'absolute';
+            iframe.style.left = '50%';
+            iframe.style.transform = 'translateX(-50%)';
+            iframe.style.top = '20px';
+          }
+
+          // Re-apply if DOM mutations occur (some scripts may move UI)
+          const mo = new MutationObserver(() => { applyConfigPositions().catch(()=>{}); });
+          mo.observe(document.documentElement || document.body, { attributes: true, childList: true, subtree: true });
+        } catch (e) {
+          console.warn('Could not load config for UI positions', e);
+        }
+      })();
+    </script>
+</body>
+</html>
