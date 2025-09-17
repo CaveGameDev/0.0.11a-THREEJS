@@ -1,11 +1,12 @@
-# RubyDung - Import Structure Fixed
+# 0.0.11a - Rebuild For web
 
-This project now uses proper ES6 module imports with a clean folder structure.
+-The
+-This project now uses proper ES6 module imports with a clean folder structure.
 
 ## Project Structure
 
 ```
-botta/
+src/
 ├── RubyDung.js           # Main entry point and game class
 ├── LibHandler.js         # Three.js library handler
 ├── Player.js             # Player class
@@ -72,15 +73,8 @@ All imports now use proper relative paths:
    - `http://localhost:8000/index.html` - Main launcher
    - `http://localhost:8000/MAIN.html` - Direct game access
    - `http://localhost:8000/FS.html` - Fullscreen mode
-
+(OR JUST GO TO THE NETLIFY LINK AND PICK A URL) 
 ## Three.js Library Configuration
-
-All Three.js libraries now use your local Three.js installation:
-
-- **RGBELoader.js** - HDR environment map loading
-- **GLTFLoader.js** - 3D model loading (GLTF/GLB format)
-- **BufferGeometryUtils.js** - Geometry utilities
-- **LibHandler.js** - Central export hub for all THREE components
 
 ### LibHandler.js Features:
 - Exports the complete THREE object
@@ -88,26 +82,11 @@ All Three.js libraries now use your local Three.js installation:
 - Provides async loaders for RGBELoader and GLTFLoader
 - Single source of truth for Three.js imports
 
-## Import Validation
-
-Run the comprehensive validation script to check if all modules load correctly:
-```bash
-# In browser console or as a module
-import('./validate-imports.js');
-```
-
-This will test:
-- Core Three.js library loading
-- All Three.js loaders (RGBE, GLTF, BufferGeometry utilities)
-- Game modules and their dependencies
-- Import path resolution
-
-## Module Loading
+## Summary
 
 The game uses pure ES6 modules without any build tools:
 - No Babel transpilation needed
 - No Webpack bundling required
 - Uses local Three.js library (no external CDN dependencies)
 - All imports are resolved at runtime by the browser
-
-This setup allows for easy development and debugging while maintaining a clean, organized codebase structure.
+- Also built off of original java code
