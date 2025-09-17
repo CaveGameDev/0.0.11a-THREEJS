@@ -84,7 +84,7 @@ class RubyDung {
             void 0 === window.JSZip &&
                 (await new Promise((e, t) => {
                     const i = document.createElement("script");
-                    (i.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"), (i.onload = () => e()), (i.onerror = (e) => t(e)), document.head.appendChild(i);
+                    (i.src = "./jszip.min.js"), (i.onload = () => e()), (i.onerror = (e) => t(e)), document.head.appendChild(i);
                 }));
             const e = await fetch("/ASSETS.zip");
             if (!e.ok) throw new Error("ASSETS.zip fetch failed");
